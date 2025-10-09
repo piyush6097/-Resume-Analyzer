@@ -1,20 +1,24 @@
-import google.generativeai as genai 
+import google.generativeai as genai
 from dotenv import load_dotenv
-import os 
+import os
 
+# Load environment variables (for local use)
 load_dotenv()
 
+# Get API key
 api_key = os.getenv("GOOGLE_API_KEY")
+if not api_key:
+    raise ValueError("GOOGLE_API_KEY not found. Set it in your environment variables.")
 
-
+# Configure Gemini
 genai.configure(api_key=api_key)
 
 configuration = {
-    "temperature":1,
-    "top_p":0.95,
-    "top_k":40,
-    "max_output_tokens":8192,
-    "response_mime_type":"text/plain"
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 40,
+    "max_output_tokens": 8192,
+    "response_mime_type": "text/plain"
 }
 
 model = genai.GenerativeModel(
@@ -22,7 +26,8 @@ model = genai.GenerativeModel(
     generation_config=configuration
 )
 
-def analyse_resume_gemini(resume_content,job_description):
+
+def analyse_resume_gemini(resume_content, job_description):
     prompt = f"""
     You are a professional resume analyzer.
 
@@ -47,7 +52,6 @@ def analyse_resume_gemini(resume_content,job_description):
     Summary:
     ...
     """
-    
+
     response = model.generate_content(prompt)
-    
     return response.text
