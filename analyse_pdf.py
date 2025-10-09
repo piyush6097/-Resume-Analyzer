@@ -22,7 +22,7 @@ configuration = {
 }
 
 model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
+    model_name="gemini-2.5-flash",
     generation_config=configuration
 )
 
@@ -55,3 +55,4 @@ def analyse_resume_gemini(resume_content, job_description):
 
     response = model.generate_content(prompt)
     return response.text
+
