@@ -1,7 +1,6 @@
 from flask import Flask, request, render_template
-import fitz  # PyMuPDF
-from analyse_pdf import analyse_resume_gemini
 import os
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -9,6 +8,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
 def extract_text_from_resume(pdf_path):
+    """Extract text from uploaded resume PDF."""
     try:
         doc = fitz.open(pdf_path)
         text = ""
@@ -22,6 +22,7 @@ def extract_text_from_resume(pdf_path):
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
+
     if request.method == "POST":
         resume_file = request.files.get("resume")
         job_description = request.form.get("job_description", "")
@@ -36,6 +37,8 @@ def index():
             resume_content = extract_text_from_resume(pdf_path)
 
             try:
+                # ✅ Import here (lazy load heavy dependency)
+                from analyse_pdf import analyse_resume_gemini
                 result = analyse_resume_gemini(resume_content, job_description)
             except Exception as e:
                 result = f"Error analyzing resume: {e}"
@@ -44,4 +47,5 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Render uses dynamic ports
+    app.run(host="0.0.0.0", port=port)
