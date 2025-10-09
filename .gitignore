@@ -1,13 +1,7 @@
-# Python cache
 __pycache__/
-*.pyc
-
-# Virtual environment
-venv/
-.env/
-
-# Environment variables
 .env
+uploads/
+*.pyc
+.DS_Store
+venv/
 
-# VS Code settings
-.vscode/
