@@ -1,3 +1,8 @@
+@app.route("/health")
+def health():
+    return "OK", 200
+
+
 from flask import Flask, request, render_template
 import os
 import fitz  # PyMuPDF
@@ -49,3 +54,4 @@ def index():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))  # Render uses dynamic ports
     app.run(host="0.0.0.0", port=port)
+
