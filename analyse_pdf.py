@@ -2,30 +2,28 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-def analyse_resume_gemini(resume_content, job_description):
-    # Load environment variable
-    load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        return "Error: GOOGLE_API_KEY not found. Please set it in your environment variables."
+# ✅ Load once globally (not in every function call)
+load_dotenv()
+api_key = os.getenv("GOOGLE_API_KEY")
 
-    # Configure Gemini API
-    genai.configure(api_key=api_key)
-    configuration = {
+if not api_key:
+    raise ValueError("Error: GOOGLE_API_KEY not found in environment variables.")
+
+genai.configure(api_key=api_key)
+
+# ✅ Create model once, reuse
+model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    generation_config={
         "temperature": 1,
         "top_p": 0.95,
         "top_k": 40,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 4096,
         "response_mime_type": "text/plain"
     }
+)
 
-    # Create model instance inside function (not global)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        generation_config=configuration
-    )
-
-    # Prompt for analysis
+def analyse_resume_gemini(resume_content, job_description):
     prompt = f"""
     You are a professional resume analyzer.
 
@@ -51,7 +49,6 @@ def analyse_resume_gemini(resume_content, job_description):
     ...
     """
 
-    # Generate response
     try:
         response = model.generate_content(prompt)
         return response.text
