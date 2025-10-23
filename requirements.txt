@@ -4,3 +4,4 @@ PyMuPDF==1.22.5
 python-dotenv==1.0.0
 google-generativeai==0.8.5
 werkzeug
+pip install sentence-transformers scikit-learn
