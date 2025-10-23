@@ -1,74 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
+<!-- templates/index.html -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
     <title>Resume Analyzer</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f9fafb;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-        }
-        .container {
-            background: #fff;
-            border-radius: 10px;
-            padding: 30px;
-            max-width: 700px;
-            margin: 50px auto;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            text-align: center;
-        }
-        textarea {
-            width: 100%;
-            height: 120px;
-            padding: 10px;
-            margin-top: 10px;
-        }
-        input[type="file"] {
-            display: block;
-            margin-top: 15px;
-        }
-        button {
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #3730a3;
-        }
-        pre {
-            background: #f4f4f4;
-            padding: 15px;
-            border-radius: 10px;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>📄 Resume Analyzer</h1>
-        <form method="POST" enctype="multipart/form-data">
-            <label>Upload Resume (PDF only):</label>
-            <input type="file" name="resume" required>
+  </head>
+  <body>
+    <h1>Resume Analyzer</h1>
+    <form method="post" enctype="multipart/form-data">
+      <label>Resume (PDF): <input type="file" name="resume" accept="application/pdf"/></label><br/><br/>
+      <label>Paste Job Description (optional):</label><br/>
+      <textarea name="job_description" rows="6" cols="80"></textarea><br/><br/>
+      <label>Or select saved JD:
+        <select name="jd_id">
+          <option value="">-- none --</option>
+          {% for jd in jds %}
+            <option value="{{ jd[0] }}">{{ jd[1] }}</option>
+          {% endfor %}
+        </select>
+      </label><br/><br/>
+      <button type="submit">Analyze</button>
+    </form>
 
-            <label>Paste Job Description:</label>
-            <textarea name="job_description" placeholder="Enter job description here..." required></textarea>
-
-            <button type="submit">Analyze Resume</button>
-        </form>
-
-        {% if result %}
-        <h2>Analysis Result:</h2>
-        <pre>{{ result }}</pre>
-        {% endif %}
-    </div>
-</body>
+    <hr/>
+    {% if result %}
+      <h2>Result</h2>
+      {% if result.cached %}
+        <pre>Cached Score: {{ result.score }}/100
+Hash: {{ result.resume_hash }}</pre>
+      {% else %}
+        <pre>{{ result.raw_text }}
+Score: {{ result.score }}/100
+Hash: {{ result.resume_hash }}</pre>
+      {% endif %}
+    {% endif %}
+  </body>
 </html>
