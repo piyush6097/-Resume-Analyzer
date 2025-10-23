@@ -2,7 +2,7 @@
 from flask import Flask, request, render_template
 import os
 import fitz  # PyMuPDF
-from analyse_pdf import analyse_resume_gemini
+from analyse_pdf import analyse_resume_st
 from hash_resume import compute_sha256
 from db_cache import init_db, get_cached_score, save_score
 
@@ -10,16 +10,15 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# ✅ create DB table once at startup
+# ✅ Initialize DB
 init_db()
 
 @app.route("/health")
 def health():
     return "OK", 200
 
-
 def extract_text_from_resume(pdf_path):
-    """Extract text from PDF safely."""
+    """Extract text from PDF."""
     try:
         doc = fitz.open(pdf_path)
         text = ""
@@ -29,7 +28,6 @@ def extract_text_from_resume(pdf_path):
         return text
     except Exception as e:
         return f"Error reading PDF: {e}"
-
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -44,11 +42,10 @@ def index():
         elif not resume_file.filename.endswith(".pdf"):
             result = "Please upload a valid PDF file."
         else:
-            # Save uploaded PDF
             pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], resume_file.filename)
             resume_file.save(pdf_path)
 
-            # ✅ compute SHA-256 hash
+            # ✅ compute SHA-256 hash for caching
             resume_hash = compute_sha256(pdf_path)
 
             # ✅ check cache
@@ -56,18 +53,16 @@ def index():
             if cached_score is not None:
                 result = f"(CACHED RESULT)\n\nCached Score: {cached_score}/100"
             else:
-                # extract text + call Gemini
+                # Extract text and analyze
                 resume_content = extract_text_from_resume(pdf_path)
-                analysis = analyse_resume_gemini(resume_content, job_description)
-                result_text = analysis["raw_text"]
+                analysis = analyse_resume_st(resume_content, job_description)
                 score = analysis["score"]
 
-                # ✅ save to cache
+                # ✅ Save score to cache
                 save_score(resume_hash, score)
-                result = f"{result_text}\n\n(Saved Hash: {resume_hash})"
+                result = analysis["raw_text"] + f"\n\n(Saved Hash: {resume_hash})"
 
     return render_template("index.html", result=result)
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
