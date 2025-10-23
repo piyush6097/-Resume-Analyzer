@@ -1,57 +1,52 @@
 # analyse_pdf.py
-import os
-from dotenv import load_dotenv
-import google.generativeai as genai
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 import re
 
-load_dotenv()
-api_key = os.getenv("GOOGLE_API_KEY")
-if not api_key:
-    raise ValueError("GOOGLE_API_KEY not found.")
+# ✅ Load model once (recommended small & fast model)
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    generation_config={
-        "temperature": 1,
-        "top_p": 0.95,
-        "top_k": 40,
-        "max_output_tokens": 4096,
-        "response_mime_type": "text/plain",
-    },
-)
+def clean_text(text):
+    """Simple text cleaning."""
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
-def analyse_resume_gemini(resume_content, job_description):
-    prompt = f"""
-You are a professional resume analyzer.
+def analyse_resume_st(resume_content, job_description):
+    """
+    Compare resume and JD using SentenceTransformer embeddings.
+    Returns a structured result dict.
+    """
+    resume_text = clean_text(resume_content)
+    jd_text = clean_text(job_description)
 
-Resume:
-{resume_content}
+    # Generate embeddings
+    embeddings = model.encode([resume_text, jd_text])
+    resume_vec, jd_vec = embeddings[0], embeddings[1]
 
-Job Description:
-{job_description}
+    # Cosine similarity → scale to 0–100
+    similarity = cosine_similarity([resume_vec], [jd_vec])[0][0]
+    score = round(float(similarity) * 100, 2)
 
-Task:
-- Analyze the resume against the job description.
-- Give a match score out of 100.
-- Highlight missing skills or experiences.
-- Suggest improvements.
+    # Simple keyword difference for missing skills (optional enhancement)
+    resume_words = set(resume_text.lower().split())
+    jd_words = set(jd_text.lower().split())
+    missing = [w for w in jd_words if w not in resume_words][:10]  # top 10 missing
 
-Return this structure:
-Match Score: XX/100
-Missing Skills:
-- ...
+    result = {
+        "score": score,
+        "raw_text": f"""
+Match Score: {score}/100
+Missing Skills / Keywords (sample):
+- {', '.join(missing) if missing else 'None'}
+
 Suggestions:
-- ...
+- Include more of the missing skills or keywords in your resume.
+- Align experience with the job description for a stronger match.
+
 Summary:
-...
+This score measures textual similarity between resume and JD.
 """
-    try:
-        response = model.generate_content(prompt)
-        text = response.text
-        # extract numeric score if present
-        match = re.search(r"(\d+)\s*/\s*100", text)
-        score = float(match.group(1)) if match else 0.0
-        return {"raw_text": text, "score": score}
-    except Exception as e:
-        return {"raw_text": f"Error from Gemini API: {e}", "score": 0.0}
+    }
+
+    return result
