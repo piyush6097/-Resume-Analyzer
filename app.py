@@ -1,7 +1,6 @@
 from flask import Flask, request, render_template, jsonify, redirect, url_for
 import os
 import fitz  # PyMuPDF
-from analyse_pdf import analyse_resume_st
 from hash_resume import compute_sha256
 from db_cache import (
     init_db,
@@ -20,6 +19,23 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize database once
 init_db()
+
+# --- Lazy load model ---
+model_loaded = False
+analyse_resume_st = None
+MODEL_VERSION = None
+
+
+def lazy_load_model():
+    """Load model only when needed (prevents Railway timeout)"""
+    global model_loaded, analyse_resume_st, MODEL_VERSION
+    if not model_loaded:
+        print("[INFO] Loading SentenceTransformer model (lazy)...")
+        from analyse_pdf import analyse_resume_st as _analyse_resume_st, MODEL_VERSION as _MODEL_VERSION
+        analyse_resume_st = _analyse_resume_st
+        MODEL_VERSION = _MODEL_VERSION
+        model_loaded = True
+        print("[INFO] Model loaded successfully ✅")
 
 
 @app.route("/health")
@@ -70,14 +86,16 @@ def index():
             if selected_jd_id:
                 jd_row = get_job_description(int(selected_jd_id))
                 if jd_row:
-                    jd_text = jd_row[2]  # JD description text
+                    jd_text = jd_row[2]
                     print(f"[INFO] Selected JD: {jd_row[1]}")
             if job_description.strip():
                 jd_text = job_description  # override with pasted JD if provided
 
+            # Lazy load model only when needed
+            lazy_load_model()
+
             # Check if cached
-            from analyse_pdf import MODEL_VERSION as CURRENT_MODEL_VERSION
-            cached_score = get_cached_score(resume_hash, CURRENT_MODEL_VERSION)
+            cached_score = get_cached_score(resume_hash, MODEL_VERSION)
 
             if cached_score is not None:
                 print("[CACHE HIT] Returning cached score ✅")
@@ -87,7 +105,7 @@ def index():
                 resume_content = extract_text_from_resume(pdf_path)
                 analysis = analyse_resume_st(resume_content, jd_text)
                 score = analysis["score"]
-                model_version = analysis.get("model_version", CURRENT_MODEL_VERSION)
+                model_version = analysis.get("model_version", MODEL_VERSION)
 
                 jd_id_int = int(selected_jd_id) if selected_jd_id else None
                 save_score(
@@ -108,7 +126,6 @@ def index():
 
 
 # ========== JD MANAGEMENT ROUTES ==========
-
 @app.route("/admin/jd/add", methods=["POST"])
 def admin_add_jd():
     """Add or update a Job Description"""
@@ -129,7 +146,6 @@ def admin_list_jd():
 
 
 # ========== CANDIDATE CACHE MANAGEMENT ==========
-
 @app.route("/admin/candidates", methods=["GET"])
 def admin_list_candidates():
     rows = list_cached_candidates()
@@ -144,9 +160,7 @@ def admin_delete_candidate():
     delete_cached(resume_hash)
     return "deleted", 200
 
+
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8080))  # Railway injects this automatically
     app.run(host="0.0.0.0", port=port)
-
-
