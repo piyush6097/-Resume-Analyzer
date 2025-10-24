@@ -1,23 +1,34 @@
-# app.py
 from flask import Flask, request, render_template, jsonify, redirect, url_for
 import os
 import fitz  # PyMuPDF
 from analyse_pdf import analyse_resume_st
 from hash_resume import compute_sha256
-from db_cache import init_db, get_cached_score, save_score, add_job_description, list_job_descriptions, list_cached_candidates, delete_cached, get_job_description
+from db_cache import (
+    init_db,
+    get_cached_score,
+    save_score,
+    add_job_description,
+    list_job_descriptions,
+    list_cached_candidates,
+    delete_cached,
+    get_job_description
+)
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# init db once
+# Initialize database once
 init_db()
+
 
 @app.route("/health")
 def health():
     return "OK", 200
 
+
 def extract_text_from_resume(pdf_path):
+    """Extract text from a PDF using PyMuPDF"""
     try:
         doc = fitz.open(pdf_path)
         text = ""
@@ -28,19 +39,18 @@ def extract_text_from_resume(pdf_path):
     except Exception as e:
         return f"Error reading PDF: {e}"
 
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     result = None
-    jds = list_job_descriptions()
+    jds = list_job_descriptions()  # Fetch all saved JDs
 
     if request.method == "POST":
         print("\n[INFO] POST request received ✅")
 
         resume_file = request.files.get("resume")
         job_description = request.form.get("job_description", "")
-
-        print("[DEBUG] Uploaded file:", resume_file)
-        print("[DEBUG] Job description length:", len(job_description))
+        selected_jd_id = request.form.get("jd_id", "")
 
         if not resume_file:
             result = {"raw_text": "No file uploaded."}
@@ -51,46 +61,81 @@ def index():
             resume_file.save(pdf_path)
             print("[INFO] Resume saved at:", pdf_path)
 
-            # --- Compute hash
-            from hash_resume import compute_sha256
+            # Compute hash
             resume_hash = compute_sha256(pdf_path)
             print("[DEBUG] Resume hash:", resume_hash)
 
-            # --- Extract text
-            resume_content = extract_text_from_resume(pdf_path)
-            print("[INFO] Extracted resume length:", len(resume_content))
+            # Get JD text (from dropdown or textarea)
+            jd_text = ""
+            if selected_jd_id:
+                jd_row = get_job_description(int(selected_jd_id))
+                if jd_row:
+                    jd_text = jd_row[2]  # JD description text
+                    print(f"[INFO] Selected JD: {jd_row[1]}")
+            if job_description.strip():
+                jd_text = job_description  # override with pasted JD if provided
 
-            # --- Call model
-            from analyse_pdf import analyse_resume_st
-            print("[INFO] Running sentence transformer model...")
-            result = analyse_resume_st(resume_content, job_description)
+            # Check if cached
+            from analyse_pdf import MODEL_VERSION as CURRENT_MODEL_VERSION
+            cached_score = get_cached_score(resume_hash, CURRENT_MODEL_VERSION)
 
-            print("[DEBUG RESULT =>]", result)
+            if cached_score is not None:
+                print("[CACHE HIT] Returning cached score ✅")
+                result = {"cached": True, "score": cached_score, "resume_hash": resume_hash}
+            else:
+                print("[CACHE MISS] Running SentenceTransformer model...")
+                resume_content = extract_text_from_resume(pdf_path)
+                analysis = analyse_resume_st(resume_content, jd_text)
+                score = analysis["score"]
+                model_version = analysis.get("model_version", CURRENT_MODEL_VERSION)
+
+                jd_id_int = int(selected_jd_id) if selected_jd_id else None
+                save_score(
+                    resume_hash,
+                    score,
+                    model_version=model_version,
+                    jd_id=jd_id_int,
+                    source_filename=resume_file.filename
+                )
+                result = {
+                    "cached": False,
+                    "score": score,
+                    "resume_hash": resume_hash,
+                    "raw_text": analysis["raw_text"]
+                }
 
     return render_template("index.html", result=result, jds=jds)
 
-# --- JD management endpoints (simple) ---
+
+# ========== JD MANAGEMENT ROUTES ==========
+
 @app.route("/admin/jd/add", methods=["POST"])
 def admin_add_jd():
+    """Add or update a Job Description"""
     name = request.form.get("name")
     desc = request.form.get("description", "")
     if not name:
-        return "name required", 400
-    jd_id = add_job_description(name, desc)
+        return "JD name required", 400
+    add_job_description(name, desc)
+    print(f"[INFO] JD '{name}' added to database ✅")
     return redirect(url_for("index"))
+
 
 @app.route("/admin/jd/list", methods=["GET"])
 def admin_list_jd():
+    """List all stored JDs"""
     jds = list_job_descriptions()
     return jsonify(jds)
 
-# --- Admin: list cached candidates ---
+
+# ========== CANDIDATE CACHE MANAGEMENT ==========
+
 @app.route("/admin/candidates", methods=["GET"])
 def admin_list_candidates():
     rows = list_cached_candidates()
     return jsonify(rows)
 
-# --- Admin: force delete a cached hash (so next upload will re-score) ---
+
 @app.route("/admin/candidate/delete", methods=["POST"])
 def admin_delete_candidate():
     resume_hash = request.form.get("resume_hash")
