@@ -162,5 +162,7 @@ def admin_delete_candidate():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # Railway injects this automatically
+    import os
+    port = int(os.environ.get("PORT", 7860))  # Hugging Face default port
     app.run(host="0.0.0.0", port=port)
+
